@@ -19,19 +19,12 @@ type Elevator struct {
 	State        ElevatorState
 	Orders       [4][3]bool
 	Config       ElevatorConfig
+	StopActive   bool
 }
 
 type ElevatorConfig struct {
 	DoorOpenDuration time.Duration
 }
-
-// func initElevator() Elevator {
-// 	return Elevator{
-// 		CurrentFloor : -1,
-// 		Direction : elevio.MD_Stop,
-// 		State : Idle,
-// 	}
-// }
 
 func initializeFSM() Elevator { // funksjonen returnerer ferdiginitialisert instans av strukturen Elevator
 
@@ -46,6 +39,9 @@ func initializeFSM() Elevator { // funksjonen returnerer ferdiginitialisert inst
 }
 
 func OnRequestButtonPress(elevator *Elevator, btnFloor int, btnType elevio.ButtonType) {
+
+	elevator.Orders[btnFloor][btnType] = true //legger til request i Orders
+
 	switch elevator.State {
 	case DoorOpen:
 		if elevator.CurrentFloor == btnFloor {
@@ -53,6 +49,20 @@ func OnRequestButtonPress(elevator *Elevator, btnFloor int, btnType elevio.Butto
 			ClearRequestsAtFloor(elevator)
 		}
 	case Moving:
+		// Ønsker kun å legge til request i Orders, det er allerede gjort over.
+	case Idle:
+		// dersom heisen er inaktiv (Idle), skal velge ny retning og tilstand
+		dirnBehaviour := ChooseDirection(elevator) // velger retning basert på Orders
+		elevator.Direction = dirnBehaviour
+
+		if dirnBehaviour == elevio.MD_Stop {
+			// er ingen bestillinger i Orders - heisen skal være Idle
+			elevator.State = Idle
+		} else {
+			// det er flere bestillinger - heisen skal være Moving
+			elevator.State = Moving
+			elevio.SetMotorDirection(dirnBehaviour)
+		}
 	}
 }
 
@@ -93,13 +103,19 @@ func OnDoorTimeout(elevator *Elevator) {
 }
 
 func OnStopButtonPress(elevator *Elevator) {
+	if elevator.StopActive {
+		// dersom stoppknappen så trykkes, skal stoppmodus deaktiveres:
+		elevator.StopActive = false
+		elevio.SetStopLamp(false)
 
-	elevio.SetStopLamp(true)
-	elevio.SetMotorDirection((elevio.MD_Stop))
-	ClearAllRequests(elevator)
-	elevator.State = Idle
-	UpdateLights(elevator)
-
+	} else {
+		elevator.StopActive = true
+		elevio.SetStopLamp(true)
+		elevio.SetMotorDirection(elevio.MD_Stop)
+		ClearAllRequests(elevator)
+		elevator.State = Idle
+		UpdateLights(elevator)
+	}
 }
 
 func UpdateLights(elevator *Elevator) {
