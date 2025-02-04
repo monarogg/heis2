@@ -16,7 +16,7 @@ func RequestsAbove(elevator *Elevator) bool { // skal returnere true/false om de
 }
 
 func RequestsBelow(elevator *Elevator) bool { // skal returnere true/false om det er noen aktive orders i etasjer under
-	for f := elevator.CurrentFloor - 1; f < len(elevator.Orders); f-- {
+	for f := elevator.CurrentFloor - 1; f >= 0; f-- {
 		for _, order := range elevator.Orders[f] {
 			if order {
 				return true
@@ -35,19 +35,67 @@ func RequestsHere(elevator *Elevator) bool {
 	return false
 }
 
+func RequestsHereMatchingDir(elevator *Elevator, dir elevio.MotorDirection) bool {
+    for b, active := range elevator.Orders[elevator.CurrentFloor] {
+        if !active {
+            continue
+        }
+        // Stopper allltid på cab call
+        if elevio.ButtonType(b) == elevio.BT_Cab {
+            return true
+        }
+        // Stopper hvis retningen fra hall matcher nåværende retning 
+        if dir == elevio.MD_Up && elevio.ButtonType(b) == elevio.BT_HallUp {
+            return true
+        }
+        if dir == elevio.MD_Down && elevio.ButtonType(b) == elevio.BT_HallDown {
+            return true
+        }
+    }
+    return false
+}
+
 func AddOrder(elevator *Elevator, floor int, button elevio.ButtonType) {
 	elevator.Orders[floor][button] = true
 	elevio.SetButtonLamp(button, floor, true)
 
 }
 
+//func ClearRequestsAtFloor(elevator *Elevator) {
+//	// iterer over knappetypene (0, 1, 2)
+//	for b := 0; b < 3; b++ {
+//		// sletter alle bestillinger i den etasjen man er i:
+//		elevator.Orders[elevator.CurrentFloor][b] = false
+//		elevio.SetButtonLamp(elevio.ButtonType(b), elevator.CurrentFloor, false)
+//	}
+//}
+
+
+// Ny ClearRequestsAtFloor som kun  sletter om retningen om den stemmer med kjøreretning, og cab calls
 func ClearRequestsAtFloor(elevator *Elevator) {
-	// iterer over knappetypene (0, 1, 2)
-	for b := 0; b < 3; b++ {
-		// sletter alle bestillinger i den etasjen man er i:
-		elevator.Orders[elevator.CurrentFloor][b] = false
-		elevio.SetButtonLamp(elevio.ButtonType(b), elevator.CurrentFloor, false)
-	}
+    floor := elevator.CurrentFloor
+    for b := 0; b < 3; b++ {
+        if !elevator.Orders[floor][b] {
+            continue
+        }
+        buttonType := elevio.ButtonType(b)
+        if buttonType == elevio.BT_Cab {
+            // Always clear cab calls
+            elevator.Orders[floor][b] = false
+        }
+
+		if elevator.Direction == elevio.MD_Up && buttonType == elevio.BT_HallUp {
+            elevator.Orders[floor][b] = false
+        }
+
+		if elevator.Direction == elevio.MD_Down && buttonType == elevio.BT_HallDown {
+            elevator.Orders[floor][b] = false
+        } 
+		
+		if elevator.Direction == elevio.MD_Stop {
+            elevator.Orders[floor][b] = false
+        }
+    }
 }
 
 func ClearAllRequests(elevator *Elevator) {
@@ -88,13 +136,13 @@ func ChooseDirection(elevator *Elevator) elevio.MotorDirection { //velger retnin
 }
 
 func ShouldStop(elevator *Elevator) bool {
-	switch elevator.Direction {
-	case elevio.MD_Up:
-		return RequestsHere(elevator) || !RequestsAbove(elevator)
-	case elevio.MD_Down:
-		return RequestsHere(elevator) || !RequestsBelow(elevator)
-	case elevio.MD_Stop:
-		return RequestsHere(elevator)
-	}
-	return false
+    switch elevator.Direction {
+    case elevio.MD_Up:
+        return RequestsHereMatchingDir(elevator, elevio.MD_Up) || !RequestsAbove(elevator)
+    case elevio.MD_Down:
+        return RequestsHereMatchingDir(elevator, elevio.MD_Down) || !RequestsBelow(elevator)
+    case elevio.MD_Stop:
+        return RequestsHere(elevator)
+    }
+    return false
 }

@@ -51,18 +51,29 @@ func OnRequestButtonPress(elevator *Elevator, btnFloor int, btnType elevio.Butto
 	case Moving:
 		// Ønsker kun å legge til request i Orders, det er allerede gjort over.
 	case Idle:
-		// dersom heisen er inaktiv (Idle), skal velge ny retning og tilstand
-		dirnBehaviour := ChooseDirection(elevator) // velger retning basert på Orders
-		elevator.Direction = dirnBehaviour
-
-		if dirnBehaviour == elevio.MD_Stop {
-			// er ingen bestillinger i Orders - heisen skal være Idle
-			elevator.State = Idle
+		
+		//Hvis heisen står i ro, og requesten er på samme etasje: 
+		if elevator.CurrentFloor == btnFloor { 
+            elevator.State = DoorOpen
+            elevio.SetMotorDirection(elevio.MD_Stop)
+            elevio.SetDoorOpenLamp(true)
+            ClearRequestsAtFloor(elevator)
+            StartDoorTimer(elevator, 2*time.Second)
 		} else {
-			// det er flere bestillinger - heisen skal være Moving
-			elevator.State = Moving
-			elevio.SetMotorDirection(dirnBehaviour)
-		}
+
+		// dersom heisen er inaktiv (Idle), skal velge ny retning og tilstand		
+			dirnBehaviour := ChooseDirection(elevator) // velger retning basert på Orders
+			elevator.Direction = dirnBehaviour
+
+			if dirnBehaviour == elevio.MD_Stop {
+				// er ingen bestillinger i Orders - heisen skal være Idle
+				elevator.State = Idle
+			} else {
+				// det er flere bestillinger - heisen skal være Moving
+				elevator.State = Moving
+				elevio.SetMotorDirection(dirnBehaviour)
+			}
+		}	
 	}
 }
 
@@ -79,28 +90,45 @@ func OnFloorArrival(elevator *Elevator, floor int) {
 
 	if ShouldStop(elevator) {
 		elevio.SetMotorDirection(elevio.MD_Stop)
-		elevio.SetDoorOpenLamp(true) // skal door open lamp være på her?
-		ClearAllRequests(elevator)
-		elevator.State = Idle // usikker på om state skal være Idle??
-
-		// starte dørens tidsavbrudd????
-
+		elevator.Direction = elevio.MD_Stop
+	
+		elevio.SetDoorOpenLamp(true)
+		elevator.State = DoorOpen
+	
+		ClearRequestsAtFloor(elevator)
+	
+		StartDoorTimer(elevator, 2*time.Second)
 	}
 }
 
 // funksjon som skal brukes når døren har vært åpen tilstrekkelig lenge (dør skal lukkes osv.):
-func OnDoorTimeout(elevator *Elevator) {
-	elevio.SetDoorOpenLamp(false)
+//func OnDoorTimeout(elevator *Elevator) {
+//	elevio.SetDoorOpenLamp(false)
+//
+//	elevator.Direction = ChooseDirection(elevator)
+//	if elevator.Direction == elevio.MD_Stop {
+//		elevator.State = Idle
+//	} else {
+//		elevator.State = Moving
+//		elevio.SetMotorDirection(elevator.Direction)
+//
+//	}
+//}
 
+func OnDoorTimeout(elevator *Elevator) {
+    elevio.SetDoorOpenLamp(false)
 	elevator.Direction = ChooseDirection(elevator)
+
 	if elevator.Direction == elevio.MD_Stop {
 		elevator.State = Idle
 	} else {
 		elevator.State = Moving
 		elevio.SetMotorDirection(elevator.Direction)
-
 	}
 }
+
+
+
 
 func OnStopButtonPress(elevator *Elevator) {
 	if elevator.StopActive {
