@@ -11,62 +11,42 @@ func main() {
 
 	elevio.Init("localhost:15657", numFloors)
 
-	var d elevio.MotorDirection = elevio.MD_Up
-	elevio.SetMotorDirection(d)
-
 	drv_buttons := make(chan elevio.ButtonEvent)
 	drv_floors := make(chan int)
 	drv_obstr := make(chan bool)
 	drv_stop := make(chan bool)
 
-	// elevator := initElevator()
+	elevator := initializeFSM()
 
 	go elevio.PollButtons(drv_buttons)
 	go elevio.PollFloorSensor(drv_floors)
 	go elevio.PollObstructionSwitch(drv_obstr)
 	go elevio.PollStopButton(drv_stop)
 
+	fmt.Println("Elevator system ready")
+
 	for {
 		select {
-		case a := <-drv_buttons:
-			fmt.Printf("%+v\n", a)
-			elevio.SetButtonLamp(a.Button, a.Floor, true)
-			// if a == true {
-			//     d = elevio.MD_Up
-			// }
+		case a := <-drv_buttons: // a tilsvarer knappetrykket
+			// håndtere trykk på knapper
+			OnRequestButtonPress(&elevator, a.Floor, a.Button)
 
-		case a := <-drv_floors:
-			fmt.Printf("%+v\n", a)
-			if a > 0 {
-				d = elevio.MD_Up
-				elevio.SetMotorDirection(d)
-			}
+		case a := <-drv_floors: // a blir etasjen man ankommer
+			OnFloorArrival(&elevator, a)
 
-			if a == numFloors-1 {
-				d = elevio.MD_Down
-			} else if a == 0 {
-				d = elevio.MD_Up
-			}
-			elevio.SetMotorDirection(d)
-
-		case a := <-drv_obstr:
-			fmt.Printf("%+v\n", a)
+		case a := <-drv_obstr: // håndterer dersom obstruction blir aktivert
 			if a {
+
 				elevio.SetMotorDirection(elevio.MD_Stop)
 			} else {
-				elevio.SetMotorDirection(d)
+				elevio.SetMotorDirection(elevator.Direction)
 			}
 
-		case a := <-drv_stop:
-			fmt.Printf("%+v\n", a)
-			for f := 0; f < numFloors; f++ {
-				for b := elevio.ButtonType(0); b < 3; b++ {
-					elevio.SetButtonLamp(b, f, false)
-				}
-			}
-			elevio.SetMotorDirection(elevio.MD_Stop)
-			elevio.SetStopLamp(true)
+		case <-drv_stop: // håndterer dersom stop blir trykket
+			OnStopButtonPress(&elevator)
 
 		}
+
+		UpdateLights(&elevator)
 	}
 }
